@@ -1,142 +1,98 @@
-# MedLink Backend API
+# MedLink — Microservices Architecture
 
-MedLink is a hospital appointment and bed booking web platform that allows users to search for nearby hospitals, check real-time bed availability, and book appointments with doctors. This repository contains the backend service, built using Spring Boot and **MySQL**, providing a robust REST API for the frontend client.
+## Overview
+MedLink is a healthcare platform backend built with a **microservices architecture** using **Spring Boot** and **Spring Cloud Netflix**. The system manages hospitals, doctors, patients, and appointments through independent, scalable services.
 
-Developed by **Piyush Kumar, Sairam Sharan, Anadi Mehta, Satyam Gupta, Sweta Kumari, Sanchita, and Mayank**, students at **IIIT Lucknow** (Beta).
+## Architecture
 
----
+```
+                        React Frontend (port 3000)
+                              │
+                              ▼
+                    ┌── API Gateway ──────┐
+                    │    (port 4000)       │
+                    │  Spring Cloud Gateway│
+                    └─────────┬───────────┘
+                              │
+                    ┌── Eureka Server ────┐
+                    │    (port 8761)       │
+                    │  Service Discovery   │
+                    └─────────┬───────────┘
+                              │
+            ┌─────────────────┼─────────────────┐
+            ▼                 ▼                  ▼
+    ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐
+    │ Auth Service  │ │Hospital Svc  │ │Appointment Svc   │
+    │  (port 4001)  │ │ (port 4002)  │ │   (port 4003)    │
+    │ JWT + OTP     │ │ Hospital CRUD│ │ Booking + Contact│
+    │ Login/Register│ │              │ │ Email Confirm    │
+    └──────────────┘ └──────────────┘ └──────────────────┘
+            │                 │                  │
+            └─────────────────┼──────────────────┘
+                              ▼
+                    PostgreSQL (Neon Cloud)
+```
 
-## 🚀 Technology Stack
+## Services
 
-- **Framework:** Spring Boot 3.5.11 (Java 25)
-- **Database:** MySQL 8+
-- **ORM:** Spring Data JPA (Hibernate)
-- **Authentication:** JWT (jjwt 0.11)
-- **Email:** Spring Mail (SMTP)
-- **Build Tool:** Maven
+| Service | Port | Description |
+|---|---|---|
+| **Eureka Server** | 8761 | Netflix Eureka service discovery and registry |
+| **API Gateway** | 4000 | Spring Cloud Gateway — routes requests to services |
+| **Auth Service** | 4001 | JWT authentication, OTP verification, email service |
+| **Hospital Service** | 4002 | Hospital CRUD operations |
+| **Appointment Service** | 4003 | Appointment booking, contact form, email confirmations |
 
----
+## Technologies Used
+- **Spring Boot 3.2.4** — Application framework
+- **Spring Cloud Netflix Eureka** — Service discovery and registration
+- **Spring Cloud Gateway** — API gateway for request routing
+- **Spring Data JPA** — Database access with Hibernate ORM
+- **Spring Security** — Authentication and authorization
+- **JWT (jjwt)** — Stateless token-based authentication
+- **PostgreSQL** — Database (Neon Cloud)
+- **Lombok** — Boilerplate code reduction
 
-## 🛠️ Running Locally
+## Getting Started
 
 ### Prerequisites
+- Java 17+
+- Maven
+- Docker (optional)
 
-1. **Java Development Kit (JDK) 25** installed.
-2. **MySQL Server** installed and running on your local machine.
-3. Configure `application.properties` with your MySQL credentials, database URI, and Gmail SMTP credentials (for sending OTPs).
-
-### Setup and Execution
-
-Clone the repository and run the application using the Maven wrapper:
-
+### Run Individually
 ```bash
-cd medlink_backend/medlink
-./mvnw clean install
-./mvnw spring-boot:run
+# 1. Start Eureka Server first
+cd eureka-server && ./mvnw spring-boot:run
+
+# 2. Start API Gateway
+cd api-gateway && ./mvnw spring-boot:run
+
+# 3. Start Services (in any order)
+cd auth-service && ./mvnw spring-boot:run
+cd hospital-service && ./mvnw spring-boot:run
+cd appointment-service && ./mvnw spring-boot:run
 ```
 
-The application will start on **`http://localhost:4000`**.
+### Verify
+- Eureka Dashboard: http://localhost:8761
+- API Gateway: http://localhost:4000
 
----
+## API Endpoints
 
-## 📡 API Endpoints
+All requests go through the API Gateway (`http://localhost:4000`):
 
-**Base URL:** `http://localhost:4000`
+| Method | Endpoint | Service | Description |
+|---|---|---|---|
+| POST | `/register` | auth-service | Register new user |
+| PUT | `/verify-account` | auth-service | Verify OTP |
+| POST | `/login` | auth-service | Login and get JWT |
+| GET | `/hospitals/{location}` | hospital-service | Get hospitals by location |
+| GET | `/hospitals/id/{id}` | hospital-service | Get hospital by ID |
+| POST | `/hospitals/upload` | hospital-service | Bulk upload hospitals |
+| POST | `/appointment` | appointment-service | Book appointment |
+| GET | `/appointment/{id}` | appointment-service | Get appointments |
+| POST | `/contact` | appointment-service | Submit contact form |
 
-### Authentication
-
-| Method | Endpoint | Description | Request Body | Response |
-|--------|----------|-------------|--------------|----------|
-| `POST` | `/register` | Register a new user account. Sends OTP email for verification. | `{ "firstName", "lastName", "email", "password" }` | `{ "statusCode": 200, "message": "..." }` |
-| `PUT` | `/verify-account` | Verify account with OTP sent to email. | Query params: `email`, `otp` | `{ "token": "<JWT>", "statusCode": 200 }` |
-| `POST` | `/login` | Login with credentials. Returns JWT token. | `{ "email", "password" }` | `{ "token": "<JWT>", "statusCode": 200 }` |
-
-### Hospitals
-
-| Method | Endpoint | Description | Request Body | Response |
-|--------|----------|-------------|--------------|----------|
-| `GET` | `/hospitals/{location}` | Get hospitals by city/location. | N/A | `[ { "id", "name", "address", "location", "contactInfo", "beds" } ]` |
-| `POST` | `/hospitals/upload` | Bulk upload hospitals (admin utility). | `[ { "name", "address", "location", "contactInfo", "beds" } ]` | Saved hospitals list |
-| `GET` | `/hospitals/id/{id}` | Get hospital by ID. | N/A | `{ "id", "name", "address", "location", "contactInfo", "beds" }` |
-
-### Appointments
-
-| Method | Endpoint | Description | Request Body | Response |
-|--------|----------|-------------|--------------|----------|
-| `POST` | `/appointment` | Create a new appointment. | `{ "patientId", "fullName", "email", "phone", "date", "time", "message" }` | Saved appointment object |
-| `GET` | `/appointment/{id}` | Get all appointments for a user by user ID. | N/A | `[ { "id", "patientId", "fullName", "email", "phone", "date", "time", "message" } ]` |
-
-### Contact
-
-| Method | Endpoint | Description | Request Body | Response |
-|--------|----------|-------------|--------------|----------|
-| `POST` | `/contact` | Submit a contact form message. | `{ "fullName", "email", "message" }` | Saved contact object |
-
----
-
-## 🔒 Authentication Flow
-
-1. **Register** - User submits name, email, password to `POST /register` and the backend sends OTP to email
-2. **Verify OTP** - User enters 6-digit OTP via `PUT /verify-account?email=...&otp=...` and receives a JWT token
-3. **Login** - User submits email, password to `POST /login` and receives a JWT token
-4. **JWT Security** - The frontend must include the JWT Token in the `Authorization` header (`Bearer <token>`) for protected routes.
-
----
-
-## 🗄️ Data Models
-
-### UserModel
-```json
-{
-  "id": "long",
-  "email": "string",
-  "password": "string (hashed)",
-  "firstName": "string",
-  "lastName": "string",
-  "otp": "string",
-  "active": "boolean",
-  "otpGeneratedTime": "LocalDateTime"
-}
-```
-
-### HospitalModel
-```json
-{
-  "id": "long",
-  "name": "string",
-  "address": "string",
-  "location": "string (city)",
-  "contactInfo": "string",
-  "beds": "int (total bed count)"
-}
-```
-
-### PatientInfo (Appointment)
-```json
-{
-  "id": "long",
-  "patientId": "string (user ID)",
-  "fullName": "string",
-  "email": "string",
-  "phone": "string",
-  "date": "string (YYYY-MM-DD)",
-  "time": "string (HH:MM)",
-  "message": "string (Department: X | Doctor: Y | Symptoms: Z)"
-}
-```
-
-### ContactModel
-```json
-{
-  "id": "long",
-  "email": "string",
-  "fullName": "string",
-  "message": "string"
-}
-```
-
----
-
-## 🌐 CORS Configuration
-
-The backend is configured to allow all origins (`*`) for cross-origin requests, supporting the following HTTP methods: `GET`, `POST`, `PUT`, `DELETE`, `OPTIONS`.
+## Contributing
+Contributions are welcome! Fork the repository, make your changes, and submit a pull request.
